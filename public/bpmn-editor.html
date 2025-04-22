@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>BPMN Editor</title>
+  <style>
+    html, body, #canvas {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    .bjs-powered-by {
+      display: none !important;
+    }
+  </style>
+  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@9.4.1/dist/assets/diagram-js.css" />
+  <link rel="stylesheet" href="https://unpkg.com/bpmn-js@9.4.1/dist/assets/bpmn-font/css/bpmn.css" />
+  <script src="https://unpkg.com/bpmn-js@9.4.1/dist/bpmn-modeler.production.min.js"></script>
+</head>
+<body>
+  <div id="canvas"></div>
+  <script>
+    // Initialize the BPMN modeler
+    const modeler = new BpmnJS({
+      container: '#canvas'
+    });
+
+    // Listen for messages from the parent window
+    window.addEventListener('message', function(event) {
+      // Handle initialization with XML
+      if (event.data && event.data.type === 'init-bpmn') {
+        const xml = event.data.xml;
+        const readOnly = event.data.readOnly;
+
+        // Import the XML
+        modeler.importXML(xml).then(function() {
+          // Fit the view to the diagram
+          modeler.get('canvas').zoom('fit-viewport');
+
+          // If read-only, disable interactions
+          if (readOnly) {
+            try {
+              const canvas = modeler.get('canvas');
+              canvas.viewbox(canvas.viewbox());
+              
+              // Disable interactions
+              const eventBus = modeler.get('eventBus');
+              eventBus.on('element.click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                return false;
+              });
+              
+              const dragging = modeler.get('dragging');
+              if (dragging && typeof dragging.init === 'function') {
+                dragging.init(null, false);
+              }
+            } catch (err) {
+              console.error('Error configuring read-only mode:', err);
+            }
+          }
+        }).catch(function(err) {
+          console.error('Error importing BPMN XML:', err);
+        });
+      }
+    });
+
+    // Send XML back to parent when it changes
+    modeler.on('commandStack.changed', async function() {
+      try {
+        const { xml } = await modeler.saveXML({ format: true });
+        window.parent.postMessage({
+          type: 'bpmn-xml',
+          xml: xml
+        }, '*');
+      } catch (err) {
+        console.error('Error saving BPMN XML:', err);
+      }
+    });
+  </script>
+</body>
+</html>
